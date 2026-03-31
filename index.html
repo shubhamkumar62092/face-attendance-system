@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FaceAttend — Facial Recognition Attendance</title>
+<style>
+  :root {
+    --navy:   #0F172A;
+    --blue:   #2563EB;
+    --blue2:  #1D4ED8;
+    --sky:    #EFF6FF;
+    --green:  #16A34A;
+    --green2: #DCFCE7;
+    --red:    #DC2626;
+    --red2:   #FEE2E2;
+    --gray0:  #F8FAFC;
+    --gray1:  #F1F5F9;
+    --gray2:  #E2E8F0;
+    --gray3:  #CBD5E1;
+    --gray5:  #64748B;
+    --gray7:  #334155;
+    --white:  #FFFFFF;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+    --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.05);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--gray0); color: var(--navy); min-height: 100vh; }
+
+  /* ── top nav ── */
+  nav {
+    background: var(--white);
+    border-bottom: 1px solid var(--gray2);
+    padding: 0 2rem;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; color: var(--navy); }
+  .logo-dot { width: 28px; height: 28px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .logo-dot svg { width: 16px; height: 16px; fill: white; }
+  .nav-status { font-size: 13px; color: var(--gray5); display: flex; align-items: center; gap: 6px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── tabs ── */
+  .tabs { display: flex; gap: 4px; background: var(--gray1); border-bottom: 1px solid var(--gray2); padding: 8px 2rem 0; }
+  .tab {
+    padding: 8px 20px 10px;
+    border: none; background: none; cursor: pointer;
+    font-size: 14px; font-weight: 500; color: var(--gray5);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    border-radius: 6px 6px 0 0; transition: color .15s, border-color .15s;
+  }
+  .tab:hover { color: var(--blue); }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--white); }
+
+  /* ── layout ── */
+  .main { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── cards ── */
+  .card {
+    background: var(--white);
+    border: 1px solid var(--gray2);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--gray2);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title { font-size: 15px; font-weight: 600; color: var(--navy); }
+  .card-subtitle { font-size: 13px; color: var(--gray5); margin-top: 2px; }
+  .card-body { padding: 1.5rem; }
+
+  /* ── grid ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media(max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* ── webcam area ── */
+  .cam-wrap {
+    position: relative;
+    background: #0F172A;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    aspect-ratio: 4/3;
+  }
+  .cam-wrap video, .cam-wrap canvas {
+    width: 100%; height: 100%; object-fit: cover;
+    display: block;
+  }
+  .cam-wrap canvas { position: absolute; top: 0; left: 0; }
+  .cam-placeholder {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #64748B; gap: 12px;
+  }
+  .cam-placeholder svg { width: 48px; height: 48px; opacity: .4; }
+  .cam-placeholder p { font-size: 14px; opacity: .6; }
+
+  /* ── snapshot strip ── */
+  .snap-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; min-height: 56px; }
+  .snap-thumb {
+    width: 56px; height: 56px; border-radius: 6px;
+    object-fit: cover; border: 2px solid var(--gray2);
+    cursor: pointer; transition: border-color .15s;
+  }
+  .snap-thumb:hover { border-color: var(--blue); }
+  .snap-count {
+    font-size: 13px; color: var(--gray5); margin-top: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  /* ── form ── */
+  .form-group { margin-bottom: 1rem; }
+  label { display: block; font-size: 13px; font-weight: 500; color: var(--gray7); margin-bottom: 6px; }
+  input[type="text"], input[type="range"] {
+    width: 100%; padding: 9px 12px;
+    border: 1px solid var(--gray3); border-radius: var(--radius-sm);
+    font-size: 14px; color: var(--navy); background: var(--white);
+    transition: border-color .15s, box-shadow .15s; outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+  input[type="range"] { padding: 0; height: 4px; cursor: pointer; }
+
+  /* ── buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 18px; border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 500; cursor: pointer; border: none;
+    transition: background .15s, transform .1s, opacity .15s;
+  }
+  .btn:active { transform: scale(.98); }
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-primary:hover { background: var(--blue2); }
+  .btn-primary:disabled { opacity: .5; cursor: default; }
+  .btn-ghost { background: var(--gray1); color: var(--gray7); border: 1px solid var(--gray2); }
+  .btn-ghost:hover { background: var(--gray2); }
+  .btn-success { background: var(--green); color: white; }
+  .btn-success:hover { background: #15803D; }
+  .btn-danger { background: var(--red2); color: var(--red); border: 1px solid #FECACA; }
+  .btn-danger:hover { background: #FEE2E2; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 1rem; }
+
+  /* ── badges ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 500;
+  }
+  .badge-green { background: var(--green2); color: #166534; }
+  .badge-red   { background: var(--red2);   color: #991B1B; }
+  .badge-blue  { background: var(--sky);    color: #1D4ED8; }
+  .badge-gray  { background: var(--gray1);  color: var(--gray5); }
+
+  /* ── toast ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    background: var(--navy); color: white;
+    padding: 12px 20px; border-radius: var(--radius-sm);
+    font-size: 14px; max-width: 340px;
+    transform: translateY(80px); opacity: 0;
+    transition: transform .3s, opacity .3s;
+    pointer-events: none;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { background: #166534; }
+  #toast.error   { background: #991B1B; }
+
+  /* ── stats row ── */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  .stat-card {
+    background: var(--white); border: 1px solid var(--gray2);
+    border-radius: var(--radius); padding: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+  .stat-label { font-size: 12px; font-weight: 500; color: var(--gray5); text-transform: uppercase; letter-spacing: .05em; }
+  .stat-value { font-size: 2rem; font-weight: 700; color: var(--navy); margin-top: 6px; line-height: 1; }
+  .stat-sub   { font-size: 12px; color: var(--gray5); margin-top: 4px; }
+
+  /* ── attendance table ── */
+  .att-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .att-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--gray5); text-transform: uppercase; letter-spacing: .04em; padding: 10px 12px; background: var(--gray0); border-bottom: 1px solid var(--gray2); }
+  .att-table td { padding: 11px 12px; border-bottom: 1px solid var(--gray1); color: var(--gray7); vertical-align: middle; }
+  .att-table tr:last-child td { border-bottom: none; }
+  .att-table tr:hover td { background: var(--gray0); }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--sky); color: var(--blue);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+  }
+  .name-cell { display: flex; align-items: center; gap: 10px; }
+
+  /* ── recognition overlay ── */
+  .rec-names {
+    position: absolute; bottom: 10px; left: 10px; right: 10px;
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .rec-chip {
+    padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 600;
+    backdrop-filter: blur(4px);
+  }
+  .rec-chip.known   { background: rgba(22,163,74,.85); color: white; }
+  .rec-chip.unknown { background: rgba(220,38,38,.75);  color: white; }
+
+  /* ── people grid ── */
+  .people-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .person-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 99px;
+    background: var(--sky); border: 1px solid #BFDBFE;
+    font-size: 13px; color: #1D4ED8; font-weight: 500;
+  }
+  .person-chip .avatar { width: 24px; height: 24px; font-size: 9px; }
+
+  /* ── empty state ── */
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--gray5); }
+  .empty svg { width: 48px; height: 48px; margin: 0 auto 12px; opacity: .3; display: block; }
+  .empty p { font-size: 14px; }
+
+  /* ── loader ── */
+  .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: white; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── live badge ── */
+  .live-badge { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--red); font-weight: 600; }
+  .live-dot   { width: 7px; height: 7px; background: var(--red); border-radius: 50%; animation: pulse 1.2s infinite; }
+
+  .section-title { font-size: 13px; font-weight: 600; color: var(--gray5); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+
+  .tolerance-row { display: flex; align-items: center; gap: 12px; }
+  .tolerance-row input { flex: 1; }
+  .tolerance-val { font-size: 13px; font-weight: 600; color: var(--blue); min-width: 32px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">
+    <div class="logo-dot">
+      <svg viewBox="0 0 24 24"><path d="M12 2C9.24 2 7 4.24 7 7s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/></svg>
+    </div>
+    FaceAttend
+  </div>
+  <div class="nav-status">
+    <span class="status-dot"></span>
+    <span id="nav-people-count">0 people registered</span>
+  </div>
+</nav>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('register', this)">Register</button>
+  <button class="tab" onclick="switchTab('recognize', this)">Recognize</button>
+  <button class="tab" onclick="switchTab('attendance', this)">Attendance</button>
+</div>
+
+<div class="main">
+
+  <!-- ════════════════════════════════════════
+       PANEL 1 — REGISTER
+  ════════════════════════════════════════ -->
+  <div id="panel-register" class="panel active">
+    <div class="grid-2">
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Register a New Person</div>
+            <div class="card-subtitle">Capture 3–5 photos for best accuracy</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="reg-name" placeholder="e.g. Priya Sharma" autocomplete="off">
+          </div>
+
+          <div class="cam-wrap" id="reg-cam-wrap">
+            <video id="reg-video" autoplay muted playsinline></video>
+            <canvas id="reg-canvas" style="display:none"></canvas>
+            <div class="cam-placeholder" id="reg-placeholder">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+              <p>Camera will appear here</p>
+            </div>
+          </div>
+
+          <div class="snap-strip" id="snap-strip"></div>
+          <div class="snap-count" id="snap-count"></div>
+
+          <div class="btn-row">
+            <button class="btn btn-ghost" id="reg-start-btn" onclick="startRegCam()">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+              Open Camera
+            </button>
+            <button class="btn btn-primary" id="snap-btn" onclick="snapPhoto()" disabled>
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+              Capture Photo
+            </button>
+            <button class="btn btn-success" id="reg-submit-btn" onclick="submitRegistration()" disabled>
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+              Register
+            </button>
+          </div>
+
+          <div id="reg-feedback" style="margin-top:12px; font-size:13px;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Registered People</div>
+          <span id="people-badge" class="badge badge-blue">0 people</span>
+        </div>
+        <div class="card-body" id="people-list">
+          <div class="empty">
+            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+            <p>No one registered yet</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       PANEL 2 — RECOGNIZE
+  ════════════════════════════════════════ -->
+  <div id="panel-recognize" class="panel">
+    <div class="grid-2">
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Live Recognition</div>
+            <div class="card-subtitle">Attendance is marked automatically</div>
+          </div>
+          <div class="live-badge" id="live-badge" style="display:none">
+            <div class="live-dot"></div> LIVE
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="cam-wrap" id="rec-cam-wrap">
+            <video id="rec-video" autoplay muted playsinline></video>
+            <canvas id="rec-overlay"></canvas>
+            <div class="cam-placeholder" id="rec-placeholder">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+              <p>Camera not started</p>
+            </div>
+            <div class="rec-names" id="rec-names"></div>
+          </div>
+
+          <div style="margin-top:16px;">
+            <div class="section-title">Tolerance</div>
+            <div class="tolerance-row">
+              <input type="range" id="tolerance-slider" min="30" max="70" value="50" step="1" oninput="document.getElementById('tol-val').textContent=(this.value/100).toFixed(2)">
+              <span class="tolerance-val" id="tol-val">0.50</span>
+            </div>
+            <p style="font-size:12px; color:var(--gray5); margin-top:4px;">Lower = stricter matching. Adjust if getting false matches.</p>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="rec-start-btn" onclick="startRecCam()">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              Start
+            </button>
+            <button class="btn btn-ghost" id="rec-stop-btn" onclick="stopRecCam()" disabled>
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+              Stop
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Present Today</div>
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;" onclick="loadPresent()">Refresh</button>
+        </div>
+        <div class="card-body" id="present-list">
+          <div class="empty">
+            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+            <p>No one recognized yet</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       PANEL 3 — ATTENDANCE
+  ════════════════════════════════════════ -->
+  <div id="panel-attendance" class="panel">
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Present Today</div>
+        <div class="stat-value" id="stat-present">—</div>
+        <div class="stat-sub" id="stat-date"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Registered</div>
+        <div class="stat-value" id="stat-registered">—</div>
+        <div class="stat-sub">total people</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Attendance Rate</div>
+        <div class="stat-value" id="stat-rate">—</div>
+        <div class="stat-sub">today</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Attendance Log</div>
+          <div class="card-subtitle">Showing today's records</div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input type="date" id="att-date" style="font-size:13px; padding:6px 10px; border:1px solid var(--gray3); border-radius:6px; color:var(--navy); background:var(--white);" onchange="loadAttendance()">
+          <button class="btn btn-ghost" style="padding:6px 14px; font-size:13px;" onclick="loadAttendance()">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            Reload
+          </button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="att-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="att-tbody">
+            <tr><td colspan="4"><div class="empty"><p>Loading…</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /main -->
+
+<div id="toast"></div>
+
+<script>
+const API = 'http://127.0.0.1:5000/api';
+
+// ── state ───────────────────────────────────────────────────────────────────
+let regStream = null, recStream = null, snapPhotos = [];
+let recInterval = null;
+
+// ── utils ───────────────────────────────────────────────────────────────────
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  setTimeout(() => el.className = '', 3200);
+}
+
+function initials(name) {
+  return name.split(' ').map(w => w[0] || '').join('').toUpperCase().slice(0, 2);
+}
+
+function frameToDataURL(video, canvas) {
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+// ── tab switching ────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'attendance') { loadAttendance(); loadStats(); }
+  if (name === 'recognize')  { loadPresent(); }
+}
+
+// ── load people ──────────────────────────────────────────────────────────────
+async function loadPeople() {
+  try {
+    const res = await fetch(API + '/people');
+    const data = await res.json();
+    const count = data.total;
+    document.getElementById('nav-people-count').textContent = count + ' people registered';
+    document.getElementById('people-badge').textContent = count + ' people';
+
+    const container = document.getElementById('people-list');
+    if (!count) {
+      container.innerHTML = `<div class="empty"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><p>No one registered yet</p></div>`;
+      return;
+    }
+    container.innerHTML = `<div class="people-grid">${data.people.map(name =>
+      `<div class="person-chip"><div class="avatar">${initials(name)}</div>${name}</div>`
+    ).join('')}</div>`;
+  } catch(e) { /* server not running */ }
+}
+
+// ── registration cam ─────────────────────────────────────────────────────────
+async function startRegCam() {
+  try {
+    regStream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480 } });
+    const video = document.getElementById('reg-video');
+    video.srcObject = regStream;
+    document.getElementById('reg-placeholder').style.display = 'none';
+    document.getElementById('snap-btn').disabled = false;
+    document.getElementById('reg-start-btn').disabled = true;
+    toast('Camera ready — capture 3 to 5 photos');
+  } catch(e) {
+    toast('Could not access camera: ' + e.message, 'error');
+  }
+}
+
+function snapPhoto() {
+  const video  = document.getElementById('reg-video');
+  const canvas = document.getElementById('reg-canvas');
+  const dataURL = frameToDataURL(video, canvas);
+  snapPhotos.push(dataURL);
+
+  const strip = document.getElementById('snap-strip');
+  const img = document.createElement('img');
+  img.src = dataURL; img.className = 'snap-thumb';
+  img.title = 'Click to remove';
+  img.onclick = function() {
+    const idx = Array.from(strip.children).indexOf(img);
+    if (idx >= 0) snapPhotos.splice(idx, 1);
+    img.remove();
+    updateSnapCount();
+  };
+  strip.appendChild(img);
+  updateSnapCount();
+}
+
+function updateSnapCount() {
+  const n = snapPhotos.length;
+  document.getElementById('snap-count').textContent = n ? `${n} photo${n>1?'s':''} captured` : '';
+  document.getElementById('reg-submit-btn').disabled = n < 1;
+}
+
+async function submitRegistration() {
+  const name = document.getElementById('reg-name').value.trim();
+  if (!name) { toast('Please enter a name', 'error'); return; }
+  if (!snapPhotos.length) { toast('Capture at least one photo', 'error'); return; }
+
+  const btn = document.getElementById('reg-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Registering…';
+
+  try {
+    const res  = await fetch(API + '/register', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name, images: snapPhotos })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast(data.message, 'success');
+      snapPhotos = [];
+      document.getElementById('snap-strip').innerHTML = '';
+      document.getElementById('reg-name').value = '';
+      updateSnapCount();
+      loadPeople();
+    } else {
+      toast(data.error, 'error');
+    }
+  } catch(e) {
+    toast('Server not reachable. Run: python app.py', 'error');
+  }
+  btn.innerHTML = '<svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Register';
+  btn.disabled = false;
+}
+
+// ── recognition cam ──────────────────────────────────────────────────────────
+async function startRecCam() {
+  try {
+    recStream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480 } });
+    const video   = document.getElementById('rec-video');
+    const overlay = document.getElementById('rec-overlay');
+    video.srcObject = recStream;
+    document.getElementById('rec-placeholder').style.display = 'none';
+    document.getElementById('rec-start-btn').disabled = true;
+    document.getElementById('rec-stop-btn').disabled = false;
+    document.getElementById('live-badge').style.display = 'flex';
+    await new Promise(r => video.onloadedmetadata = r);
+    overlay.width  = video.videoWidth;
+    overlay.height = video.videoHeight;
+    recInterval = setInterval(runRecognition, 1800);
+    toast('Recognition running — faces will be detected automatically', 'success');
+  } catch(e) {
+    toast('Camera error: ' + e.message, 'error');
+  }
+}
+
+function stopRecCam() {
+  clearInterval(recInterval); recInterval = null;
+  if (recStream) { recStream.getTracks().forEach(t => t.stop()); recStream = null; }
+  document.getElementById('rec-placeholder').style.display = 'flex';
+  document.getElementById('rec-start-btn').disabled = false;
+  document.getElementById('rec-stop-btn').disabled = true;
+  document.getElementById('live-badge').style.display = 'none';
+  document.getElementById('rec-names').innerHTML = '';
+  const ctx = document.getElementById('rec-overlay').getContext('2d');
+  ctx.clearRect(0, 0, 9999, 9999);
+  toast('Recognition stopped');
+}
+
+async function runRecognition() {
+  const video   = document.getElementById('rec-video');
+  const overlay = document.getElementById('rec-overlay');
+  const tol     = document.getElementById('tolerance-slider').value / 100;
+  const canvas  = document.createElement('canvas');
+  const dataURL = frameToDataURL(video, canvas);
+
+  try {
+    const res  = await fetch(API + '/recognize', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ image: dataURL, tolerance: tol })
+    });
+    const data = await res.json();
+    if (!data.success) return;
+
+    drawBoxes(overlay, data.faces, video.videoWidth, video.videoHeight);
+    updatePresentList(data.present_today);
+    updateChips(data.faces);
+  } catch(e) { /* server not running */ }
+}
+
+function drawBoxes(canvas, faces, w, h) {
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  faces.forEach(f => {
+    const {top, right, bottom, left} = f.box;
+    ctx.strokeStyle = f.match ? '#16A34A' : '#DC2626';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(left, top, right - left, bottom - top);
+    ctx.fillStyle = f.match ? 'rgba(22,163,74,.82)' : 'rgba(220,38,38,.8)';
+    ctx.fillRect(left, bottom, right - left, 22);
+    ctx.fillStyle = 'white';
+    ctx.font = '600 12px Inter, system-ui, sans-serif';
+    ctx.fillText(f.name, left + 5, bottom + 15);
+  });
+}
+
+function updateChips(faces) {
+  const el = document.getElementById('rec-names');
+  el.innerHTML = faces.map(f =>
+    `<span class="rec-chip ${f.match ? 'known' : 'unknown'}">${f.name}</span>`
+  ).join('');
+}
+
+async function loadPresent() {
+  try {
+    const res  = await fetch(API + '/attendance');
+    const data = await res.json();
+    updatePresentList(Object.keys(data.live_present));
+  } catch(e) {}
+}
+
+function updatePresentList(names) {
+  const el = document.getElementById('present-list');
+  if (!names || !names.length) {
+    el.innerHTML = `<div class="empty"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg><p>No one recognized yet</p></div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <span class="badge badge-green">${names.length} present</span>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      ${names.map(name => `
+        <div style="display:flex; align-items:center; gap:10px; padding:8px; border:1px solid var(--gray2); border-radius:8px; background:var(--gray0);">
+          <div class="avatar" style="background:var(--green2);color:#166534;">${initials(name)}</div>
+          <span style="font-size:14px; font-weight:500;">${name}</span>
+          <span class="badge badge-green" style="margin-left:auto;">Present</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ── attendance log ────────────────────────────────────────────────────────────
+async function loadAttendance() {
+  const dateInput = document.getElementById('att-date');
+  const date = dateInput.value || new Date().toISOString().slice(0, 10);
+  dateInput.value = date;
+
+  try {
+    const res  = await fetch(API + `/attendance?date=${date}`);
+    const data = await res.json();
+    const tbody = document.getElementById('att-tbody');
+
+    if (!data.records.length) {
+      tbody.innerHTML = `<tr><td colspan="4"><div class="empty"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg><p>No records for ${date}</p></div></td></tr>`;
+    } else {
+      tbody.innerHTML = data.records.map(r => `
+        <tr>
+          <td><div class="name-cell"><div class="avatar">${initials(r.Name)}</div><span style="font-weight:500;">${r.Name}</span></div></td>
+          <td>${r.Date}</td>
+          <td>${r.Time}</td>
+          <td><span class="badge badge-green">Present</span></td>
+        </tr>`).join('');
+    }
+  } catch(e) {
+    document.getElementById('att-tbody').innerHTML = `<tr><td colspan="4"><div class="empty"><p>Start the Flask server: <code>python app.py</code></p></div></td></tr>`;
+  }
+}
+
+async function loadStats() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('stat-date').textContent = today;
+  document.getElementById('att-date').value = today;
+  try {
+    const [attRes, peopleRes] = await Promise.all([
+      fetch(API + `/attendance?date=${today}`),
+      fetch(API + '/people')
+    ]);
+    const att    = await attRes.json();
+    const people = await peopleRes.json();
+    const present    = att.records.length;
+    const registered = people.total;
+    const rate = registered ? Math.round(present / registered * 100) : 0;
+    document.getElementById('stat-present').textContent    = present;
+    document.getElementById('stat-registered').textContent = registered;
+    document.getElementById('stat-rate').textContent       = rate + '%';
+  } catch(e) {}
+}
+
+// ── init ─────────────────────────────────────────────────────────────────────
+document.getElementById('att-date').value = new Date().toISOString().slice(0, 10);
+loadPeople();
+loadAttendance();
+</script>
+</body>
+</html>
